@@ -1,0 +1,298 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Golden Flaming Ball Animation</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="gameCanvas"></div>
+    <script>
+        let scene, camera, renderer, ball, particles, earth, moon;
+        let isDragging = false;
+        let ballVelocity = new THREE.Vector3(0.02, 0.02, 0);
+        
+        // Array of colors for the ball
+        let colors = [
+            0xffd700, // Gold
+            0xff4500, // Orange Red
+            0x1e90ff, // Dodger Blue
+            0x32cd32, // Lime Green
+            0xff69b4, // Hot Pink
+            0xff0000, // Red
+            0x00ff00, // Green
+            0x0000ff, // Blue
+            0x800080, // Purple
+            0x008080, // Teal
+            0x000080, // Navy
+            0x808080, // Gray
+            0x9400d3, // Dark Violet
+            0xa52a2a, // Brown
+            0xdc143c, // Crimson
+            0x00bfff, // Deep Sky Blue
+            0x696969, // Dim Gray
+            0x008b8b, // Dark Cyan
+            0xb22222, // Firebrick
+            0x006400, // Dark Green
+            0xff8c00, // Dark Orange
+            0x8b008b, // Dark Magenta
+        ];
+        let currentColorIndex = 0;
+
+        let shootingStars = [];
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('gameCanvas').appendChild(renderer.domElement);
+
+            // Load the galaxy background image
+            const loader = new THREE.TextureLoader();
+            loader.load('galaxy.png', function(texture) {
+                const backgroundGeometry = new THREE.PlaneGeometry(10, 10); // Adjust size as needed
+                const backgroundMaterial = new THREE.MeshBasicMaterial({ map: texture });
+                const backgroundMesh = new THREE.Mesh(backgroundGeometry, backgroundMaterial);
+
+                // Position the background behind the scene
+                backgroundMesh.position.z = -5; // Adjust position to ensure it's behind other objects
+                backgroundMesh.rotation.x = -Math.PI / 2; // Rotate if necessary to face the camera
+
+                // Add the background mesh to the scene
+                scene.add(backgroundMesh);
+            });
+
+            const geometry = new THREE.SphereGeometry(0.8, 32, 32);
+            const material = new THREE.MeshPhongMaterial({ color: 0xffd700 }); // Gold color
+            ball = new THREE.Mesh(geometry, material);
+            scene.add(ball);
+
+            // Create Earth
+            const earthGeometry = new THREE.SphereGeometry(1, 32, 32);
+            const earthMaterial = new THREE.MeshPhongMaterial({ color: 0x0000ff }); // Blue color
+            earth = new THREE.Mesh(earthGeometry, earthMaterial);
+            earth.position.z = -2; // Position Earth behind the ball
+            scene.add(earth);
+
+            // Create network around Earth
+            const networkGeometry = new THREE.SphereGeometry(1.05, 32, 32); // Reduced radius
+            const networkMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+            const network = new THREE.Mesh(networkGeometry, networkMaterial);
+            network.position.z = -2; // Position network around Earth
+            scene.add(network);
+
+            // Create Moon
+            const moonGeometry = new THREE.SphereGeometry(0.2, 32, 32);
+            const moonMaterial = new THREE.MeshPhongMaterial({ color : 0xffffff }); // White color
+            moon = new THREE.Mesh(moonGeometry, moonMaterial);
+            moon.position.z = -2.5; // Position Moon behind Earth
+            moon.position.x = 1.5; // Position Moon to the right of Earth
+            scene.add(moon);
+
+            const light = new THREE.PointLight(0xffffff, 1, 100);
+            light.position.set(0, 0, 10);
+            scene.add(light);
+
+            camera.position.z = 5;
+
+            createParticles();
+
+            createShootingStars();
+
+            window.addEventListener('resize', onWindowResize, false);
+            renderer.domElement.addEventListener('mousedown', onMouseDown, false);
+            renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+            renderer.domElement.addEventListener('mouseup', onMouseUp, false);
+
+            // Call changeBallColor every second
+            setInterval(changeBallColor, 1000);
+
+            // Rotate network around Earth
+            function rotateNetwork() {
+                network.rotation.y += 0.001;
+                requestAnimationFrame(rotateNetwork);
+            }
+            rotateNetwork();
+
+            // Rotate Moon around Earth
+            function rotateMoon() {
+                moon.position.x = Math.cos(Date.now() * 0.001) * 1.5;
+                moon.position.z = Math.sin(Date.now() * 0.001) * 1.5 - 2.5;
+                requestAnimationFrame(rotateMoon);
+            }
+            rotateMoon();
+        }
+
+        function createParticles() {
+            const particleCount = 2000;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * 2;
+                positions[i * 3 + 1] = (Math.random() - 0.5) * 2;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 2;
+
+                colors[i * 3] = 1; // Red
+                colors[i * 3 + 1] = 0.8 + Math.random() * 0.2; // Green (for golden effect)
+                colors[i * 3 + 2] = 0; // Blue
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 0.05,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                transparent: true
+            });
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+        }
+
+        function createShootingStars() {
+            const starGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.5, 8); // Cylinder for shooting star
+            const starMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White color for stars
+
+            for (let i = 0; i < 24; i++) {
+                const star = new THREE.Mesh(starGeometry, starMaterial);
+                star.position.z = -2; // Position stars behind the ball
+                shootingStars.push(star);
+                scene.add(star);
+            }
+        }
+
+        function animateShootingStars() {
+            shootingStars.forEach((star, index) => {
+                const angle = Date.now() * 0.001 + index; // Different angle for each star
+                star.position.x = Math.cos(angle) * (2 + Math.random() * 0.5); // Radius varies
+                star.position.y = Math.sin(angle) * (2 + Math.random() * 0.5); // Radius varies
+                star.position.z = -2; // Keep stars behind the Earth
+
+                // Optional: Make shooting stars move in a straight line
+                star.position.y -= 0.01; // Move downwards to create shooting effect
+                if (star.position.y < -3) {
+                    star.position.y = 2; // Reset position when out of view
+                }
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onMouseDown(event) {
+            isDragging = true;
+            ballVelocity.set(0, 0, 0);
+        }
+
+        function onMouseMove(event) {
+            if (isDragging) {
+                const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+                const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+                ball.position.x = mouseX * 3;
+                ball.position.y = mouseY * 2;
+            }
+        }
+
+        function onMouseUp(event) {
+            isDragging = false;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!isDragging) {
+                ball.position.add(ballVelocity);
+
+                // Bounce off edges
+                if (ball.position.x < -3 || ball.position.x > 3) ballVelocity.x *= -1;
+                if (ball.position.y < -2 || ball.position.y > 2) ballVelocity.y *= -1;
+
+                // Apply "gravity"
+                ballVelocity.y -= 0.001;
+            }
+
+            updateParticles();
+            
+            animateShootingStars();
+
+            renderer.render(scene, camera);
+        }
+
+        function updateParticles() {
+            const positions = particles.geometry.attributes.position.array;
+            const colors = particles.geometry.attributes.color.array;
+
+            for (let i = 0; i < positions.length; i += 3) {
+                positions[i] += (Math.random() - 0.5) * 0.1;
+                positions[i + 1] += (Math.random() - 0.5) * 0.1 + 0.1;
+                positions[i + 2] += (Math.random() - 0.5) * 0.1;
+
+                if (positions[i + 1] > 2 || 
+                    Math.sqrt(Math.pow(positions[i] - ball.position.x, 2) + 
+                              Math.pow(positions[i + 1] - ball.position.y, 2) + 
+                              Math.pow(positions[i + 2] - ball.position.z, 2)) > 1.5) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = Math.random() * 0.5 + 0.8;
+                    positions[i] = Math.cos(angle) * radius + ball.position.x;
+                    positions[i + 1] = Math.sin(angle) * radius + ball.position.y;
+                    positions[i + 2] = (Math.random() - 0.5) * 0.5 + ball.position.z;
+
+                    colors[i] = 1; // Red
+                    colors[i + 1] = 0.8 + Math.random() * 0.2; // Green (for golden effect)
+                    colors[i + 2] = 0; // Blue
+                }
+
+                // Fade out particles
+                colors[i + 1] -= 0.01;
+                if (colors[i + 1] < 0.5) colors[i + 1] = 0.5;
+            }
+
+            particles.geometry.attributes.position.needsUpdate = true;
+            particles.geometry.attributes.color.needsUpdate = true;
+        }
+
+        function changeBallColor() {
+            currentColorIndex = (currentColorIndex + 1) % colors.length ; // Cycle through colors
+            ball.material.color.setHex(colors[currentColorIndex]); // Change ball color
+        }
+
+        init();
+        animate();
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Website</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="flame-text">
+    </div>
+</body>
+</html>
